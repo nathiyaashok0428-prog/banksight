@@ -5,6 +5,7 @@
 import streamlit as st
 import pandas as pd
 from db_connection import get_connection, create_tables
+from analytics_queries import QUERIES
 
 # ---------------------------------------------------------
 # INITIAL SETUP
@@ -213,25 +214,12 @@ elif page == "Credit / Debit Simulation":
 # ---------------------------------------------------------
 # ANALYTICAL INSIGHTS (ALL 15 QUERIES PLACEHOLDER)
 # ---------------------------------------------------------
-elif page == "Analytical Insights":
+elif page=="Analytical Insights":
     st.header("📊 Analytical Insights")
-
-    queries = {
-        "Q1: Customers & avg balance by city":
-        """
-        SELECT c.city,
-               COUNT(DISTINCT c.customer_id) AS total_customers,
-               ROUND(AVG(a.account_balance), 2) AS avg_balance
-        FROM customers c
-        JOIN accounts a ON c.customer_id = a.customer_id
-        GROUP BY c.city
-        """
-    }
-
-    selected_query = st.selectbox("Select Query", list(queries.keys()))
-    st.code(queries[selected_query], language="sql")
-    result = pd.read_sql(queries[selected_query], conn)
-    st.dataframe(result)
+    q = st.selectbox("Select Question", list(QUERIES.keys()))
+    st.code(QUERIES[q], language="sql")
+    df = pd.read_sql(QUERIES[q], conn)
+    st.dataframe(df)
 
 # ---------------------------------------------------------
 # ABOUT
