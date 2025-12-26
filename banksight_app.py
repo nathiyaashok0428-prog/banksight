@@ -79,32 +79,64 @@ elif MENU=="CRUD Operations":
             st.success("Deleted")
 
 # ---------- CREDIT / DEBIT ----------
-elif MENU=="Credit / Debit Simulation":
-    acc = st.number_input("Account ID", step=1)
-    amount = st.number_input("Amount", min_value=0.0)
-    action = st.radio("Action", ["Check Balance","Deposit","Withdraw"])
+elif page == "Credit / Debit Simulation":
+    st.header("💰 Deposit / Withdraw Money")
 
-    cur = conn.cursor()
-    cur.execute("SELECT account_balance FROM accounts WHERE account_id=?",(acc,))
-    row = cur.fetchone()
+    customer_id = st.text_input("Enter Customer ID (e.g., C0001)")
+    amount = st.number_input("Enter Amount (₹)", min_value=0.0, step=100.0)
 
-    if row:
-        balance = row[0]
-        if action=="Check Balance":
-            st.info(f"Current Balance: ₹{balance}")
-        elif action=="Deposit" and st.button("Submit"):
-            cur.execute("UPDATE accounts SET account_balance=account_balance+? WHERE account_id=?",(amount,acc))
-            conn.commit()
-            st.success("Deposit Successful")
-        elif action=="Withdraw" and st.button("Submit"):
-            if amount<=balance:
-                cur.execute("UPDATE accounts SET account_balance=account_balance-? WHERE account_id=?",(amount,acc))
-                conn.commit()
-                st.success("Withdrawal Successful")
+    action = st.radio(
+        "Select Action",
+        ["Check Balance", "Deposit", "Withdraw"]
+    )
+
+    if st.button("Submit"):
+        if not customer_id:
+            st.error("Please enter Customer ID")
+        else:
+            conn = get_connection()
+            cur = conn.cursor()
+
+            # Fetch account
+            cur.execute(
+                "SELECT account_id, account_balance FROM accounts WHERE customer_id = ?",
+                (customer_id,)
+            )
+            row = cur.fetchone()
+
+            if not row:
+                st.error("No account found for this customer")
             else:
-                st.error("Insufficient Balance")
-    else:
-        st.error("Account not found")
+                account_id, balance = row
+
+                if action == "Check Balance":
+                    st.success(f"💳 Current Balance: ₹{balance:,.2f}")
+
+                elif action == "Deposit":
+                    new_balance = balance + amount
+                    cur.execute(
+                        "UPDATE accounts SET account_balance = ? WHERE account_id = ?",
+                        (new_balance, account_id)
+                    )
+                    conn.commit()
+                    st.success(f"✅ Deposited ₹{amount:,.2f}")
+                    st.info(f"💳 Updated Balance: ₹{new_balance:,.2f}")
+
+                elif action == "Withdraw":
+                    if amount > balance:
+                        st.error("❌ Insufficient balance")
+                    else:
+                        new_balance = balance - amount
+                        cur.execute(
+                            "UPDATE accounts SET account_balance = ? WHERE account_id = ?",
+                            (new_balance, account_id)
+                        )
+                        conn.commit()
+                        st.success(f"✅ Withdrawn ₹{amount:,.2f}")
+                        st.info(f"💳 Updated Balance: ₹{new_balance:,.2f}")
+
+            conn.close()
+
 
 # ---------- ANALYTICS ----------
 elif MENU=="Analytical Insights":
