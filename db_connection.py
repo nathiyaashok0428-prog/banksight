@@ -1,9 +1,7 @@
-# =========================================================
 # db_connection.py
-# SQLite DB connection & schema creation
-# =========================================================
 
 import sqlite3
+import os
 
 DB_NAME = "banksight.db"
 
@@ -12,9 +10,9 @@ def get_connection():
 
 def create_tables():
     conn = get_connection()
-    cursor = conn.cursor()
+    cur = conn.cursor()
 
-    cursor.executescript("""
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS customers (
         customer_id TEXT PRIMARY KEY,
         name TEXT,
@@ -23,15 +21,19 @@ def create_tables():
         city TEXT,
         account_type TEXT,
         join_date DATE
-    );
+    )
+    """)
 
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS accounts (
         account_id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id TEXT,
         account_balance REAL,
         last_updated TEXT
-    );
+    )
+    """)
 
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS transactions (
         txn_id TEXT PRIMARY KEY,
         customer_id TEXT,
@@ -39,19 +41,10 @@ def create_tables():
         amount REAL,
         txn_time TEXT,
         status TEXT
-    );
+    )
+    """)
 
-    CREATE TABLE IF NOT EXISTS branches (
-        branch_id INTEGER PRIMARY KEY,
-        branch_name TEXT,
-        city TEXT,
-        manager_name TEXT,
-        total_employees INTEGER,
-        branch_revenue REAL,
-        opening_date DATE,
-        performance_rating INTEGER
-    );
-
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS loans (
         loan_id INTEGER PRIMARY KEY,
         customer_id INTEGER,
@@ -64,8 +57,10 @@ def create_tables():
         start_date DATE,
         end_date DATE,
         loan_status TEXT
-    );
+    )
+    """)
 
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS credit_cards (
         card_id INTEGER PRIMARY KEY,
         customer_id INTEGER,
@@ -79,8 +74,10 @@ def create_tables():
         issued_date DATE,
         expiry_date DATE,
         status TEXT
-    );
+    )
+    """)
 
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS support_tickets (
         ticket_id TEXT PRIMARY KEY,
         customer_id TEXT,
@@ -97,7 +94,7 @@ def create_tables():
         support_agent TEXT,
         channel TEXT,
         customer_rating INTEGER
-    );
+    )
     """)
 
     conn.commit()
