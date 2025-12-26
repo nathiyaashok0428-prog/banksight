@@ -1,85 +1,163 @@
-# banksight_app.py
+# =========================================================
+# BankSight - Streamlit Application
+# =========================================================
 
 import streamlit as st
 import pandas as pd
 from db_connection import get_connection, create_tables
-from analytics_queries import QUERIES
 
-st.set_page_config("BankSight Dashboard", layout="wide")
-create_tables()
+# ---------------------------------------------------------
+# INITIAL SETUP
+# ---------------------------------------------------------
+st.set_page_config(page_title="BankSight Dashboard", layout="wide")
+
+create_tables()  # SAFE: uses CREATE TABLE IF NOT EXISTS
 conn = get_connection()
+cur = conn.cursor()
 
-MENU = st.sidebar.radio(
-    "BankSight Navigation",
-    ["Introduction","View Tables","Filter Data",
-     "CRUD Operations","Credit / Debit Simulation",
-     "Analytical Insights","About"]
+TABLES = [
+    "customers",
+    "accounts",
+    "transactions",
+    "loans",
+    "credit_cards",
+    "support_tickets",
+    "branches"
+]
+
+# ---------------------------------------------------------
+# SIDEBAR NAVIGATION
+# ---------------------------------------------------------
+st.sidebar.title("🏦 BankSight Navigation")
+page = st.sidebar.radio(
+    "Go to",
+    [
+        "Introduction",
+        "View Tables",
+        "Filter Data",
+        "CRUD Operations",
+        "Credit / Debit Simulation",
+        "Analytical Insights",
+        "About"
+    ]
 )
 
-# ---------- INTRO ----------
-if MENU=="Introduction":
+# ---------------------------------------------------------
+# INTRODUCTION
+# ---------------------------------------------------------
+if page == "Introduction":
     st.title("🏦 BankSight: Transaction Intelligence Dashboard")
-    st.write("End-to-end banking analytics using Python, SQL & Streamlit")
+    st.markdown("""
+    **BankSight** is a financial analytics dashboard built using  
+    **Python, SQL, Pandas, and Streamlit**.
 
-# ---------- VIEW TABLES ----------
-elif MENU=="View Tables":
-    table = st.selectbox("Select Table", 
-        ["customers","accounts","transactions","loans",
-         "credit_cards","support_tickets"])
+    **Key Features**
+    - Customer & Account Analysis
+    - Transaction Monitoring
+    - Loan & Credit Insights
+    - CRUD Operations
+    - Credit / Debit Simulation
+    - Analytical SQL Insights
+    """)
+
+# ---------------------------------------------------------
+# VIEW TABLES (ALL 7 TABLES)
+# ---------------------------------------------------------
+elif page == "View Tables":
+    st.header("📄 View Database Tables")
+    table = st.selectbox("Select Table", TABLES)
     df = pd.read_sql(f"SELECT * FROM {table}", conn)
     st.dataframe(df)
 
-# ---------- FILTER DATA ----------
-elif MENU=="Filter Data":
-    table = st.selectbox("Filter Table",
-        ["customers","transactions","loans","accounts"])
+# ---------------------------------------------------------
+# FILTER DATA (ALL 7 TABLES – GENERIC)
+# ---------------------------------------------------------
+elif page == "Filter Data":
+    st.header("🔍 Filter Data")
+
+    table = st.selectbox("Select Table", TABLES)
     df = pd.read_sql(f"SELECT * FROM {table}", conn)
 
-    col = st.selectbox("Select Column", df.columns)
-    val = st.text_input("Filter Value")
+    column = st.selectbox("Select Column", df.columns)
+    value = st.text_input("Enter value to filter")
 
-    if val:
-        df = df[df[col].astype(str).str.contains(val)]
-    st.dataframe(df)
-
-# ---------- CRUD ----------
-elif MENU=="CRUD Operations":
-    table = st.selectbox("Table", ["customers","accounts","transactions"])
-    action = st.radio("Action", ["View","Add","Update","Delete"])
-
-    df = pd.read_sql(f"SELECT * FROM {table}", conn)
-
-    if action=="View":
+    if value:
+        filtered_df = df[df[column].astype(str).str.contains(value, case=False)]
+        st.dataframe(filtered_df)
+    else:
         st.dataframe(df)
 
-    elif action=="Add":
-        data = {}
+# ---------------------------------------------------------
+# CRUD OPERATIONS (ALL 7 TABLES – GENERIC)
+# ---------------------------------------------------------
+elif page == "CRUD Operations":
+    st.header("🛠 CRUD Operations")
+
+    operation = st.radio("Select Operation", ["View", "Insert", "Update", "Delete"])
+    table = st.selectbox("Select Table", TABLES)
+    df = pd.read_sql(f"SELECT * FROM {table}", conn)
+
+    # ---------- VIEW ----------
+    if operation == "View":
+        st.dataframe(df)
+
+    # ---------- INSERT ----------
+    elif operation == "Insert":
+        st.subheader(f"➕ Insert into {table}")
+        new_data = {}
+
         for col in df.columns:
-            data[col] = st.text_input(col)
-        if st.button("Insert"):
-            pd.DataFrame([data]).to_sql(table, conn, if_exists="append", index=False)
-            st.success("Record Added")
+            new_data[col] = st.text_input(f"{col}")
 
-    elif action=="Update":
-        pk = df.columns[0]
-        record = st.selectbox("Select ID", df[pk])
-        col = st.selectbox("Column", df.columns)
-        new = st.text_input("New Value")
-        if st.button("Update"):
-            conn.execute(f"UPDATE {table} SET {col}=? WHERE {pk}=?",(new,record))
+        if st.button("Insert Record"):
+            cols = ",".join(new_data.keys())
+            placeholders = ",".join(["?"] * len(new_data))
+            values = tuple(new_data.values())
+
+            cur.execute(
+                f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
+                values
+            )
             conn.commit()
-            st.success("Updated")
+            st.success("Record inserted successfully")
 
-    elif action=="Delete":
-        pk = df.columns[0]
-        record = st.selectbox("Select ID", df[pk])
-        if st.button("Delete"):
-            conn.execute(f"DELETE FROM {table} WHERE {pk}=?",(record,))
+    # ---------- UPDATE ----------
+    elif operation == "Update":
+        st.subheader(f"✏️ Update {table}")
+
+        pk_col = df.columns[0]
+        pk_value = st.selectbox(f"Select {pk_col}", df[pk_col])
+
+        column = st.selectbox("Column to update", df.columns)
+        new_value = st.text_input("New value")
+
+        if st.button("Update Record"):
+            cur.execute(
+                f"UPDATE {table} SET {column}=? WHERE {pk_col}=?",
+                (new_value, pk_value)
+            )
             conn.commit()
-            st.success("Deleted")
+            st.success("Record updated successfully")
 
-# ---------- CREDIT / DEBIT ----------
-elif MENU == "Credit / Debit Simulation":
+    # ---------- DELETE ----------
+    elif operation == "Delete":
+        st.subheader(f"🗑 Delete from {table}")
+
+        pk_col = df.columns[0]
+        pk_value = st.selectbox(f"Select {pk_col} to delete", df[pk_col])
+
+        if st.button("Delete Record"):
+            cur.execute(
+                f"DELETE FROM {table} WHERE {pk_col}=?",
+                (pk_value,)
+            )
+            conn.commit()
+            st.success("Record deleted successfully")
+
+# ---------------------------------------------------------
+# CREDIT / DEBIT SIMULATION (ACCOUNTS ONLY – JOIN BASED)
+# ---------------------------------------------------------
+elif page == "Credit / Debit Simulation":
     st.header("💰 Deposit / Withdraw Money")
 
     customer_id = st.text_input("Enter Customer ID (e.g., C0001)")
@@ -91,75 +169,81 @@ elif MENU == "Credit / Debit Simulation":
     )
 
     if st.button("Submit"):
-        if not customer_id:
-            st.error("Please enter Customer ID")
+        cur.execute("""
+            SELECT a.account_id, a.account_balance
+            FROM customers c
+            JOIN accounts a
+                ON c.customer_id = a.customer_id
+            WHERE c.customer_id = ?
+        """, (customer_id,))
+
+        row = cur.fetchone()
+
+        if not row:
+            st.error("No account found for this customer")
         else:
-            conn = get_connection()
-            cur = conn.cursor()
+            account_id, balance = row
 
-            # ✅ JOIN customers & accounts
-            cur.execute("""
-                SELECT a.customer_id, a.account_balance
-                FROM customers c
-                JOIN accounts a
-                    ON c.customer_id = a.customer_id
-                WHERE c.customer_id = ?
-            """, (customer_id,))
+            if action == "Check Balance":
+                st.success(f"💳 Current Balance: ₹{balance:,.2f}")
 
-            row = cur.fetchone()
+            elif action == "Deposit":
+                new_balance = balance + amount
+                cur.execute(
+                    "UPDATE accounts SET account_balance=? WHERE account_id=?",
+                    (new_balance, account_id)
+                )
+                conn.commit()
+                st.success(f"Deposited ₹{amount:,.2f}")
+                st.info(f"Updated Balance: ₹{new_balance:,.2f}")
 
-            if not row:
-                st.error("❌ No account found for this customer")
-            else:
-                account_id, balance = row
-
-                if action == "Check Balance":
-                    st.success(f"💳 Current Balance: ₹{balance:,.2f}")
-
-                elif action == "Deposit":
-                    new_balance = balance + amount
-                    cur.execute("""
-                        UPDATE accounts
-                        SET account_balance = ?, last_updated = CURRENT_TIMESTAMP
-                        WHERE customer_id = ?
-                    """, (new_balance, account_id))
+            elif action == "Withdraw":
+                if amount > balance:
+                    st.error("Insufficient balance")
+                else:
+                    new_balance = balance - amount
+                    cur.execute(
+                        "UPDATE accounts SET account_balance=? WHERE account_id=?",
+                        (new_balance, account_id)
+                    )
                     conn.commit()
+                    st.success(f"Withdrawn ₹{amount:,.2f}")
+                    st.info(f"Updated Balance: ₹{new_balance:,.2f}")
 
-                    st.success(f"✅ Deposited ₹{amount:,.2f}")
-                    st.info(f"💳 Updated Balance: ₹{new_balance:,.2f}")
+# ---------------------------------------------------------
+# ANALYTICAL INSIGHTS (ALL 15 QUERIES PLACEHOLDER)
+# ---------------------------------------------------------
+elif page == "Analytical Insights":
+    st.header("📊 Analytical Insights")
 
-                elif action == "Withdraw":
-                    if amount > balance:
-                        st.error("❌ Insufficient balance")
-                    else:
-                        new_balance = balance - amount
-                        cur.execute("""
-                            UPDATE accounts
-                            SET account_balance = ?, last_updated = CURRENT_TIMESTAMP
-                            WHERE customer_id = ?
-                        """, (new_balance, account_id))
-                        conn.commit()
+    queries = {
+        "Q1: Customers & avg balance by city":
+        """
+        SELECT c.city,
+               COUNT(DISTINCT c.customer_id) AS total_customers,
+               ROUND(AVG(a.account_balance), 2) AS avg_balance
+        FROM customers c
+        JOIN accounts a ON c.customer_id = a.customer_id
+        GROUP BY c.city
+        """
+    }
 
-                        st.success(f"✅ Withdrawn ₹{amount:,.2f}")
-                        st.info(f"💳 Updated Balance: ₹{new_balance:,.2f}")
+    selected_query = st.selectbox("Select Query", list(queries.keys()))
+    st.code(queries[selected_query], language="sql")
+    result = pd.read_sql(queries[selected_query], conn)
+    st.dataframe(result)
 
-            conn.close()
-
-
-# ---------- ANALYTICS ----------
-elif MENU=="Analytical Insights":
-    q = st.selectbox("Select Question", list(QUERIES.keys()))
-    st.code(QUERIES[q], language="sql")
-    df = pd.read_sql(QUERIES[q], conn)
-    st.dataframe(df)
-
-
-# ---------- ABOUT ----------
-elif MENU == "About":
+# ---------------------------------------------------------
+# ABOUT
+# ---------------------------------------------------------
+elif page == "About":
+    st.header("👤 About the Creator")
     st.markdown("""
-    **Project:** BankSight  
-    **Domain:** Banking & Finance  
+    **Name:** Nathiya  
+    **Role:** Data Science / Analytics Trainee  
     **Skills:** Python, SQL, Pandas, Streamlit  
-    **Developer:** Nathiya Ashok  
-    **Platform:** Streamlit Cloud  
+    **Project:** BankSight – Transaction Intelligence Dashboard
     """)
+
+# ---------------------------------------------------------
+conn.close()
