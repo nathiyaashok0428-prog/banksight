@@ -79,7 +79,7 @@ elif MENU=="CRUD Operations":
             st.success("Deleted")
 
 # ---------- CREDIT / DEBIT ----------
-elif page == "Credit / Debit Simulation":
+elif MENU == "Credit / Debit Simulation":
     st.header("💰 Deposit / Withdraw Money")
 
     customer_id = st.text_input("Enter Customer ID (e.g., C0001)")
