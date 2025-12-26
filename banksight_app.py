@@ -1,116 +1,204 @@
 # =========================================================
-# BankSight Streamlit App
+# banksight_app.py
+# BankSight – Streamlit Dashboard (FINAL MERGED VERSION)
 # =========================================================
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from db_connection import get_connection, create_tables
+from sqlalchemy import text
+from db_connection import get_mysql_engine, create_tables
 from analytics_queries import QUERIES
 
-st.set_page_config("BankSight Dashboard", layout="wide")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="BankSight – Transaction Intelligence Dashboard",
+    layout="wide"
+)
 
+st.title("🏦 BankSight – Transaction Intelligence Dashboard")
+
+# ---------------- DB INIT ----------------
+engine = get_mysql_engine()
 create_tables()
-conn = get_connection()
+
+# ---------------- HELPERS ----------------
+@st.cache_data
+def load_table(table):
+    return pd.read_sql(f"SELECT * FROM {table}", engine)
+
+
+def get_tables():
+    q = "SHOW TABLES"
+    df = pd.read_sql(q, engine)
+    return df.iloc[:, 0].tolist()
+
+
+def get_primary_key(table):
+    q = f"SHOW KEYS FROM {table} WHERE Key_name='PRIMARY'"
+    df = pd.read_sql(q, engine)
+    return df["Column_name"].iloc[0]
+
+
+def filter_dataframe(df):
+    st.subheader("🔍 Filter Data")
+
+    col = st.selectbox("Select column", df.columns)
+
+    if pd.api.types.is_numeric_dtype(df[col]):
+        min_v, max_v = float(df[col].min()), float(df[col].max())
+        val = st.slider("Range", min_v, max_v, (min_v, max_v))
+        df = df[df[col].between(val[0], val[1])]
+
+    elif pd.api.types.is_datetime64_any_dtype(df[col]):
+        start, end = st.date_input("Date range", [df[col].min(), df[col].max()])
+        df = df[df[col].between(pd.to_datetime(start), pd.to_datetime(end))]
+
+    else:
+        opts = st.multiselect("Values", df[col].dropna().unique())
+        if opts:
+            df = df[df[col].isin(opts)]
+
+    return df
+
 
 # ---------------- SIDEBAR ----------------
-st.sidebar.title("🏦 BankSight Navigation")
-page = st.sidebar.radio("Go to", [
-    "Introduction",
-    "View Tables",
-    "Filter Data",
-    "CRUD Operations",
-    "Credit / Debit",
-    "Analytical Insights",
-    "About Creator"
-])
+st.sidebar.header("📂 Navigation")
 
-# ---------------- INTRO ----------------
-if page == "Introduction":
-    st.title("🏦 BankSight: Transaction Intelligence Dashboard")
-    st.markdown("""
-    - Customer & account analytics  
-    - Transaction behavior  
-    - Loan insights  
-    - Support performance  
-    """)
+tables = get_tables()
+selected_table = st.sidebar.selectbox("Select Table", tables)
 
-# ---------------- VIEW TABLES ----------------
-elif page == "View Tables":
-    table = st.selectbox("Select table", [
-        "customers","accounts","transactions",
-        "branches","loans","credit_cards","support_tickets"
-    ])
-    df = pd.read_sql(f"SELECT * FROM {table}", conn)
+section = st.sidebar.radio(
+    "Select Feature",
+    [
+        "View / Filter Data",
+        "CRUD Operations",
+        "Credit / Debit",
+        "Analytical Insights"
+    ]
+)
+
+# =========================================================
+# 1️⃣ VIEW + FILTER
+# =========================================================
+if section == "View / Filter Data":
+    df = load_table(selected_table)
+    df = filter_dataframe(df)
     st.dataframe(df, use_container_width=True)
 
-# ---------------- FILTER ----------------
-elif page == "Filter Data":
-    table = st.selectbox("Table", ["customers","transactions","loans"])
-    df = pd.read_sql(f"SELECT * FROM {table}", conn)
-    col = st.selectbox("Column", df.columns)
-    val = st.text_input("Value")
-    if val:
-        df = df[df[col].astype(str).str.contains(val, case=False)]
-    st.dataframe(df)
+# =========================================================
+# 2️⃣ CRUD OPERATIONS
+# =========================================================
+elif section == "CRUD Operations":
+    st.subheader(f"🛠 CRUD – {selected_table}")
+    df = load_table(selected_table)
+    pk = get_primary_key(selected_table)
 
-# ---------------- CRUD ----------------
-elif page == "CRUD Operations":
-    st.subheader("Add Customer")
-    with st.form("add"):
-        cid = st.text_input("Customer ID")
-        name = st.text_input("Name")
-        city = st.text_input("City")
-        submit = st.form_submit_button("Insert")
-        if submit:
-            conn.execute(
-                "INSERT OR IGNORE INTO customers VALUES (?,?,?,?,?,?,?)",
-                (cid, name, "M", 30, city, "Savings", datetime.now())
+    action = st.radio("Action", ["View", "Add", "Update", "Delete"])
+
+    # ---- VIEW ----
+    if action == "View":
+        st.dataframe(df, use_container_width=True)
+
+    # ---- ADD ----
+    elif action == "Add":
+        with st.form("add_form"):
+            record = {}
+            for col in df.columns:
+                record[col] = st.text_input(col)
+            submitted = st.form_submit_button("Insert")
+
+        if submitted:
+            pd.DataFrame([record]).to_sql(
+                selected_table, engine, if_exists="append", index=False
             )
-            conn.commit()
-            st.success("Inserted")
+            st.success("✅ Record inserted")
 
-# ---------------- CREDIT / DEBIT ----------------
-elif page == "Credit / Debit":
-    acc = st.number_input("Account ID", min_value=1)
-    amt = st.number_input("Amount", min_value=0.0)
-    action = st.radio("Action", ["Deposit","Withdraw"])
+    # ---- UPDATE ----
+    elif action == "Update":
+        key_val = st.text_input(f"Enter {pk}")
 
-    if st.button("Apply"):
-        bal = pd.read_sql(
-            "SELECT account_balance FROM accounts WHERE account_id=?",
-            conn, params=(acc,)
-        )
-        if bal.empty:
-            st.error("Invalid account")
-        else:
-            balance = bal.iloc[0,0]
-            if action == "Deposit":
-                balance += amt
+        if st.button("Load Record"):
+            row = df[df[pk].astype(str) == key_val]
+            if row.empty:
+                st.error("Record not found")
             else:
-                if amt > balance:
-                    st.error("Insufficient funds")
-                    st.stop()
-                balance -= amt
+                with st.form("update_form"):
+                    updated = {}
+                    for col in df.columns:
+                        updated[col] = st.text_input(col, str(row.iloc[0][col]))
+                    submit = st.form_submit_button("Update")
 
-            conn.execute(
-                "UPDATE accounts SET account_balance=?, last_updated=? WHERE account_id=?",
-                (balance, datetime.now(), acc)
+                if submit:
+                    set_clause = ", ".join(
+                        [f"{c}='{v}'" for c, v in updated.items()]
+                    )
+                    engine.execute(
+                        text(f"UPDATE {selected_table} SET {set_clause} WHERE {pk}='{key_val}'")
+                    )
+                    st.success("✅ Updated")
+
+    # ---- DELETE ----
+    elif action == "Delete":
+        key_val = st.text_input(f"Enter {pk} to delete")
+        if st.button("Delete"):
+            engine.execute(
+                text(f"DELETE FROM {selected_table} WHERE {pk}='{key_val}'")
             )
-            conn.commit()
-            st.success(f"New Balance: ₹{balance}")
+            st.success("🗑 Deleted")
 
-# ---------------- ANALYTICS ----------------
-elif page == "Analytical Insights":
-    qname = st.selectbox("Select Query", list(QUERIES.keys()))
-    df = pd.read_sql(QUERIES[qname], conn)
-    st.dataframe(df)
+# =========================================================
+# 3️⃣ CREDIT / DEBIT
+# =========================================================
+elif section == "Credit / Debit":
+    st.subheader("💰 Credit / Debit Account")
 
-# ---------------- ABOUT ----------------
-elif page == "About Creator":
-    st.markdown("""
-    **Name:** Nathiya Ashok  
-    **Course:** GUVI – AI/ML  
-    **Project:** BankSight  
-    **Skills:** Python, SQL, Streamlit, Data Analytics  
-    """)
+    account_id = st.number_input("Account ID", step=1)
+    amount = st.number_input("Amount", min_value=1.0)
+    action = st.radio("Type", ["Credit", "Debit"])
+
+    if st.button("Submit"):
+        bal_df = pd.read_sql(
+            f"SELECT account_balance FROM accounts WHERE account_id={account_id}",
+            engine
+        )
+
+        if bal_df.empty:
+            st.error("Account not found")
+        else:
+            balance = bal_df.iloc[0]["account_balance"]
+
+            if action == "Debit" and balance < amount:
+                st.error("❌ Insufficient balance")
+            else:
+                new_balance = balance + amount if action == "Credit" else balance - amount
+
+                engine.execute(
+                    text(
+                        f"UPDATE accounts SET account_balance={new_balance} "
+                        f"WHERE account_id={account_id}"
+                    )
+                )
+
+                txn = pd.DataFrame([{
+                    "txn_id": f"T{pd.Timestamp.now().value}",
+                    "customer_id": None,
+                    "txn_type": action.lower(),
+                    "amount": amount,
+                    "txn_time": pd.Timestamp.now(),
+                    "status": "success"
+                }])
+
+                txn.to_sql("transactions", engine, if_exists="append", index=False)
+
+                st.success(f"✅ {action} successful | New balance ₹{new_balance}")
+
+# =========================================================
+# 4️⃣ ANALYTICAL INSIGHTS
+# =========================================================
+elif section == "Analytical Insights":
+    st.subheader("📊 Analytical Insights")
+
+    q_name = st.selectbox("Select Question", list(QUERIES.keys()))
+    result = pd.read_sql(QUERIES[q_name], engine)
+
+    st.dataframe(result, use_container_width=True)
