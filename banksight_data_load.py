@@ -1,9 +1,14 @@
-# banksight_data_load.py
+# =========================================================
+# data_loader.py
+# Pandas-based data insertion
+# =========================================================
+
 import pandas as pd
 import json
+import os
 from db_connection import get_connection, create_tables
 
-FILES = {
+DATA_FILES = {
     "customers": "data/customers.csv",
     "accounts": "data/accounts.csv",
     "transactions": "data/transactions.csv",
@@ -13,26 +18,40 @@ FILES = {
     "support_tickets": "data/support_tickets.csv"
 }
 
-def load_data():
+def load_file(path):
+    if path.endswith(".csv"):
+        return pd.read_csv(path)
+    elif path.endswith(".json"):
+        with open(path, "r", encoding="utf-8") as f:
+            return pd.DataFrame(json.load(f))
+    else:
+        raise ValueError("Unsupported file")
+
+def clean_df(df):
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_")
+    )
+    return df
+
+def insert_data():
     create_tables()
     conn = get_connection()
 
-    for table, path in FILES.items():
-        if path.endswith(".csv"):
-            df = pd.read_csv(path)
-        else:
-            with open(path) as f:
-                df = pd.DataFrame(json.load(f))
+    for table, path in DATA_FILES.items():
+        if not os.path.exists(path):
+            continue
 
-        df.columns = df.columns.str.lower().str.replace(" ", "_")
-
-        if table == "accounts" and "account_id" in df.columns:
-            df.drop(columns=["account_id"], inplace=True)
+        df = clean_df(load_file(path))
+        if df.empty:
+            continue
 
         df.to_sql(table, conn, if_exists="append", index=False)
-        print(f"Loaded {table}")
+        print(f"✅ Loaded {table}")
 
     conn.close()
 
 if __name__ == "__main__":
-    load_data()
+    insert_data()
