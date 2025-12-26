@@ -170,7 +170,7 @@ elif page == "Credit / Debit Simulation":
 
     if st.button("Submit"):
         cur.execute("""
-            SELECT a.account_id, a.account_balance
+            SELECT a.customer_id, a.account_balance
             FROM customers c
             JOIN accounts a
                 ON c.customer_id = a.customer_id
@@ -190,7 +190,7 @@ elif page == "Credit / Debit Simulation":
             elif action == "Deposit":
                 new_balance = balance + amount
                 cur.execute(
-                    "UPDATE accounts SET account_balance=? WHERE account_id=?",
+                    "UPDATE accounts SET account_balance=? WHERE customer_id=?",
                     (new_balance, account_id)
                 )
                 conn.commit()
@@ -203,7 +203,7 @@ elif page == "Credit / Debit Simulation":
                 else:
                     new_balance = balance - amount
                     cur.execute(
-                        "UPDATE accounts SET account_balance=? WHERE account_id=?",
+                        "UPDATE accounts SET account_balance=? WHERE customer_id=?",
                         (new_balance, account_id)
                     )
                     conn.commit()
