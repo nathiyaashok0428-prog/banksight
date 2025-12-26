@@ -97,15 +97,19 @@ elif MENU == "Credit / Debit Simulation":
             conn = get_connection()
             cur = conn.cursor()
 
-            # Fetch account
-            cur.execute(
-                "SELECT account_id, account_balance FROM accounts WHERE customer_id = ?",
-                (customer_id,)
-            )
+            # ✅ JOIN customers & accounts
+            cur.execute("""
+                SELECT a.customer_id, a.account_balance
+                FROM customers c
+                JOIN accounts a
+                    ON c.customer_id = a.customer_id
+                WHERE c.customer_id = ?
+            """, (customer_id,))
+
             row = cur.fetchone()
 
             if not row:
-                st.error("No account found for this customer")
+                st.error("❌ No account found for this customer")
             else:
                 account_id, balance = row
 
@@ -114,11 +118,13 @@ elif MENU == "Credit / Debit Simulation":
 
                 elif action == "Deposit":
                     new_balance = balance + amount
-                    cur.execute(
-                        "UPDATE accounts SET account_balance = ? WHERE account_id = ?",
-                        (new_balance, account_id)
-                    )
+                    cur.execute("""
+                        UPDATE accounts
+                        SET account_balance = ?, last_updated = CURRENT_TIMESTAMP
+                        WHERE customer_id = ?
+                    """, (new_balance, account_id))
                     conn.commit()
+
                     st.success(f"✅ Deposited ₹{amount:,.2f}")
                     st.info(f"💳 Updated Balance: ₹{new_balance:,.2f}")
 
@@ -127,11 +133,13 @@ elif MENU == "Credit / Debit Simulation":
                         st.error("❌ Insufficient balance")
                     else:
                         new_balance = balance - amount
-                        cur.execute(
-                            "UPDATE accounts SET account_balance = ? WHERE account_id = ?",
-                            (new_balance, account_id)
-                        )
+                        cur.execute("""
+                            UPDATE accounts
+                            SET account_balance = ?, last_updated = CURRENT_TIMESTAMP
+                            WHERE customer_id = ?
+                        """, (new_balance, account_id))
                         conn.commit()
+
                         st.success(f"✅ Withdrawn ₹{amount:,.2f}")
                         st.info(f"💳 Updated Balance: ₹{new_balance:,.2f}")
 
