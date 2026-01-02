@@ -253,7 +253,7 @@ elif page == "Analytical Insights":
 elif page == "About":
     st.header("ℹ️ About BankSight")
     st.markdown("""
-    **Developer:** Nathiya  
+    **Developer:** Nathiya Ashok  
     **Project Type:** Banking Analytics Dashboard  
     **Tech Stack:** Python, SQL, Pandas, Streamlit  
     **Domain:** Banking & Finance
